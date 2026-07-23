@@ -1,0 +1,14 @@
+# OS
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Editor / local
+.vscode/
+.idea/
+*.swp
+.venv*/
+.venv-favicon/
+
+# Duplicados pesados de p5 (la app usa app/js/lib/)
+app/_legacy/lib-p5-backup/
