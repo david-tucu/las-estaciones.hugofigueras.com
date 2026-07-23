@@ -18,12 +18,15 @@ class PlayState extends BaseState {
 
     this._exiting = false;
     this._activeFader = null;
+    /** @type {{ marquee: MarqueeLyrics, lastX: number, wasPlaying: boolean }|null} */
+    this._scrub = null;
     this.ui = { alpha: 0 };
   }
 
   enter() {
     this._exiting = false;
     this._activeFader = null;
+    this._scrub = null;
     this.game.tweens.killAll();
     this.ui.alpha = 0;
 
@@ -189,6 +192,7 @@ class PlayState extends BaseState {
     this.backButton = null;
     this.infoButton = null;
     this._activeFader = null;
+    this._scrub = null;
     console.info('[PlayState] exit');
   }
 
@@ -211,6 +215,9 @@ class PlayState extends BaseState {
         return;
       }
     }
+    if (this._beginScrub(x, y)) {
+      return;
+    }
   }
 
   pointerDragged(x, y) {
@@ -219,6 +226,10 @@ class PlayState extends BaseState {
     }
     if (this._activeFader) {
       this._activeFader.pointerDragged(x, y);
+      return;
+    }
+    if (this._scrub) {
+      this._dragScrub(x);
     }
   }
 
@@ -229,6 +240,10 @@ class PlayState extends BaseState {
     if (this._activeFader) {
       this._activeFader.pointerReleased(x, y);
       this._activeFader = null;
+    }
+    if (this._scrub) {
+      this._endScrub();
+      return;
     }
     if (this.backButton && this.backButton.pointerReleased(x, y)) {
       return;
@@ -243,6 +258,103 @@ class PlayState extends BaseState {
       this._activeFader.pointerCancel();
       this._activeFader = null;
     }
+    if (this._scrub) {
+      this._endScrub();
+    }
+  }
+
+  /**
+   * Inicia scrub sobre Norte o Sur.
+   * @param {number} x
+   * @param {number} y
+   * @returns {boolean}
+   */
+  _beginScrub(x, y) {
+    const marquee = this._hitMarquee(x, y);
+    if (!marquee || !this.game.mixer) {
+      return false;
+    }
+
+    const mixer = this.game.mixer;
+    const wasPlaying = mixer.isPlaying;
+    mixer.scrubbing = true;
+
+    // Referencias absolutas: evita acumulación / pelea con marquee.update()
+    this._scrub = {
+      marquee,
+      startX: x,
+      startNativeX: marquee.currentX,
+      wasPlaying,
+    };
+
+    if (wasPlaying) {
+      mixer.fadeOutAndPause(SCRUB_FADE_SEC);
+    } else {
+      mixer.masterFade = 0;
+      mixer._fadeProxy.v = 0;
+      mixer._applyAllVolumes();
+    }
+
+    console.info('[PlayState] scrub start, wasPlaying=', wasPlaying);
+    return true;
+  }
+
+  /**
+   * @param {number} x
+   */
+  _dragScrub(x) {
+    if (!this._scrub || !this.game.mixer) {
+      return;
+    }
+    const { marquee, startX, startNativeX } = this._scrub;
+
+    // Desplazamiento total desde el press (sin deltas frame-a-frame)
+    // Dedo a la derecha → tira hacia adelante en pantalla → tiempo hacia atrás
+    const nativeX = startNativeX - (x - startX) / marquee.escala;
+    const t = marquee.progressFromNativeX(nativeX);
+
+    // Solo progreso lógico durante el drag (sin stop/jump de audio → sin lag)
+    this.game.mixer.setProgressOnly(t);
+    // update() aplica órbita + marquees desde getProgress()
+  }
+
+  _endScrub() {
+    if (!this._scrub || !this.game.mixer) {
+      this._scrub = null;
+      return;
+    }
+    const { wasPlaying } = this._scrub;
+    this._scrub = null;
+    const mixer = this.game.mixer;
+    mixer.scrubbing = false;
+
+    // Un solo seek de audio al soltar
+    mixer.seekToProgress(mixer.progreso);
+
+    if (wasPlaying) {
+      mixer.fadeInAndResume(SCRUB_FADE_SEC, this.faders);
+      console.info('[PlayState] scrub end → resume fade-in @', nf(mixer.progreso, 1, 3));
+    } else {
+      mixer.masterFade = 0;
+      mixer._fadeProxy.v = 0;
+      mixer._applyAllVolumes();
+      console.info('[PlayState] scrub end → paused @', nf(mixer.progreso, 1, 3));
+    }
+  }
+
+  /**
+   * @param {number} x
+   * @param {number} y
+   * @returns {MarqueeLyrics|null}
+   */
+  _hitMarquee(x, y) {
+    if (this.marqueeNorte && this.marqueeNorte.contains(x, y)) {
+      return this.marqueeNorte;
+    }
+    if (this.marqueeSur && this.marqueeSur.contains(x, y)) {
+      return this.marqueeSur;
+    }
+    return null;
   }
 
   _buildFaders() {
@@ -295,6 +407,7 @@ class PlayState extends BaseState {
     if (this.game.mixer) {
       this.game.mixer.stopAll();
     }
+    this._scrub = null;
 
     this.game.tweens.animate(this.ui, { alpha: 0 }, 0.2);
     this.game.tweens.animate(this.backButton, { alpha: 0 }, 0.2, {

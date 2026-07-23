@@ -43,6 +43,52 @@ class MarqueeLyrics {
   }
 
   /**
+   * Alto de dibujo real (nativo × escala).
+   * @returns {number}
+   */
+  get drawHeight() {
+    return this.stripH * this.escala;
+  }
+
+  /**
+   * @param {number} px
+   * @param {number} py
+   * @returns {boolean}
+   */
+  contains(px, py) {
+    return py >= this.y && py <= this.y + this.drawHeight;
+  }
+
+  /**
+   * Invierte el mapeo nativo x → progreso t.
+   * @param {number} nativeX
+   * @returns {number} 0–1
+   */
+  progressFromNativeX(nativeX) {
+    if (!this.mapeo || this.mapeo.length < 2) {
+      return 0;
+    }
+    const first = this.mapeo[0];
+    const last = this.mapeo[this.mapeo.length - 1];
+    const x = constrain(nativeX, Math.min(first.x, last.x), Math.max(first.x, last.x));
+
+    for (let i = 0; i < this.mapeo.length - 1; i += 1) {
+      const p1 = this.mapeo[i];
+      const p2 = this.mapeo[i + 1];
+      const lo = Math.min(p1.x, p2.x);
+      const hi = Math.max(p1.x, p2.x);
+      if (x >= lo && x <= hi) {
+        if (Math.abs(p2.x - p1.x) < 0.0001) {
+          return p1.t;
+        }
+        const amt = (x - p1.x) / (p2.x - p1.x);
+        return constrain(lerp(p1.t, p2.t, amt), 0, 0.999);
+      }
+    }
+    return x <= first.x ? first.t : last.t;
+  }
+
+  /**
    * @param {number} progreso 0–1
    */
   update(progreso) {
@@ -67,8 +113,8 @@ class MarqueeLyrics {
     }
 
     const amt = (progreso - p1.t) / (p2.t - p1.t);
-    // currentX en espacio nativo de la tira; se multiplica por escala al dibujar
-    this.currentX = lerp(p1.x, p2.x, amt) - 3;
+    // currentX en espacio nativo (sin offset fijo: evita saltos al scrubear)
+    this.currentX = lerp(p1.x, p2.x, amt);
   }
 
   draw() {

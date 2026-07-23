@@ -38,8 +38,8 @@ const LYRIC_MAP_CATALOG = [
     imageKeyScore: 'parte_norte',
     // imageKeyLyrics: 'letra_norte', // TODO cuando existan assets
     map: [
-      { t: 0.0, x: LYRIC_STRIP_WIDTH / 2 + 16 },
-      { t: 1.0, x: LYRIC_STRIP_WIDTH / 2 + LYRIC_STRIP_WIDTH + 22 },
+      { t: 0.0, x: LYRIC_STRIP_WIDTH / 2 + 16  - 8},
+      { t: 1.0, x: LYRIC_STRIP_WIDTH / 2 + LYRIC_STRIP_WIDTH + 22-22 },
     ],
   },
   {
@@ -47,8 +47,8 @@ const LYRIC_MAP_CATALOG = [
     imageKeyScore: 'parte_sur',
     // imageKeyLyrics: 'letra_sur',
     map: [
-      { t: 0.0, x: 16 },
-      { t: 1.0, x: LYRIC_STRIP_WIDTH + 22 },
+      { t: 0.0, x: 32-28 },
+      { t: 1.0, x: LYRIC_STRIP_WIDTH + 22-22 },
     ],
   },
 ];

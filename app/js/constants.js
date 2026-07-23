@@ -1,4 +1,5 @@
-/**
+//TODO: agergar posicion Y de los botones PLAY STOP
+/*
  * Constantes globales de Las Estaciones.
  * Único lugar para valores de configuración fácilmente modificables.
  */
@@ -51,36 +52,36 @@ const LAYOUT = Object.freeze({
   NAV_Y: 90,
   NAV_BAR_H: 140,
   /** Bloque orbital ampliado. */
-  ORBIT_Y: 130,
-  ORBIT_H: 640,
-  TRANSPORT_Y: 800,
+  ORBIT_Y: 210,
+  ORBIT_H: 660,
+  TRANSPORT_Y: 900,
   /** Franja de partituras: más baja y más alta. */
-  LYRIC_NORTE_Y: 880,
-  LYRIC_SUR_Y: 1060,
-  LYRIC_H: 112,
+  LYRIC_NORTE_Y: 990,
+  LYRIC_SUR_Y: 1200,
+  LYRIC_H: 200,
   /**
    * Factor extra de escala de las tiras (ancho + avance + overlays).
    * escala final = (LYRIC_H / alto_nativo_80) * LYRIC_SCALE_FACTOR
    * 1 = solo la proporción por alto; >1 agranda más; <1 reduce.
    */
-  LYRIC_SCALE_FACTOR: 1.5,
+  LYRIC_SCALE_FACTOR: 1,
   /**
    * Faders más abajo (sin botón INICIO inferior) y ~20% más chicos
    * (altura de pista ≈ 512 vs 640 previos).
    */
-  FADER_TOP: 1360,
-  FADER_BOTTOM: 1872,
+  FADER_TOP: 1440,
+  FADER_BOTTOM: 1860,
   /** Escala visual de knobs / trazo del fader (1 = original). */
   FADER_SCALE: 0.8,
   /** Posición X del playhead sobre las tiras (fracción del ancho). */
-  PLAYHEAD_X_FACTOR: 0.3,
+  PLAYHEAD_X_FACTOR: 0.22,
 });
 
 /**
  * Vueltas de la Tierra sobre su eje por cada órbita completa (progreso 0→1).
  * No es escala real 365: es un valor pedagógico / visual.
  */
-const EARTH_SPINS_PER_ORBIT = 20;
+const EARTH_SPINS_PER_ORBIT = 25;
 
 /** Inclinación del eje terrestre (grados). */
 const EARTH_AXIS_TILT_DEG = 23.5;
@@ -96,3 +97,6 @@ const FADER_DEFAULT_VOLUME = 0.35;
 
 /** Suavizado de volumen hacia el valor del fader (por frame ~60fps). */
 const VOLUME_LERP = 0.08;
+
+/** Fade out/in al scrubear partituras (segundos). */
+const SCRUB_FADE_SEC = 0.09;
