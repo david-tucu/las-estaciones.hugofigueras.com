@@ -25,9 +25,24 @@ class AssetManager {
         parte_sur: 'assets/images/parte-sur.png',
         armadura: 'assets/images/armadura.png',
         fundido: 'assets/images/fundido.png',
+        // Portada intro
+        fondo_intro: 'assets/images/fondo_intro.png',
         // Personajes en la Tierra (Norte / Sur)
         p_pepe: 'assets/images/p_pepe.png',
         p_melisa: 'assets/images/p_melisa.png',
+        // Iconos de faders (voces + instrumentos)
+        cara_pepe: 'assets/images/cara_pepe.png',
+        cara_melisa: 'assets/images/cara_melisa.png',
+        i_chelo: 'assets/images/i_chelo.png',
+        i_clave: 'assets/images/i_clave.png',
+        i_contrabajo: 'assets/images/i_contrabajo.png',
+        i_viola: 'assets/images/i_viola.png',
+        i_violin1: 'assets/images/i_violin1.png',
+        i_violin2: 'assets/images/i_violin2.png',
+        // Sol (sprite cartoon)
+        sol: 'assets/images/sol.png',
+        // Tierra: solo tira de continentes (back/front son procedurales)
+        earth_continents: 'assets/images/earth_continents.png',
         // Futuro toggle letra:
         // letra_norte: 'assets/images/letra-norte.png',
         // letra_sur: 'assets/images/letra-sur.png',
@@ -37,7 +52,9 @@ class AssetManager {
         // [AUDIO_KEYS.CLIC]: 'assets/audio/ui/clic.mp3',
       },
       fonts: {
-        // main: 'assets/fonts/….ttf',
+        oups: 'assets/fonts/Oups_Clean.otf',
+        cocogoose: 'assets/fonts/CocogoosePro-Regular.otf',
+        rotunda: 'assets/fonts/Rotunda-Light.otf',
       },
     };
 
@@ -101,6 +118,20 @@ class AssetManager {
    */
   getFont(key) {
     return this.fonts.get(key) || null;
+  }
+
+  /**
+   * Activa una fuente cargada (no-op si falta).
+   * @param {string} key FONTS.OUPS | COCOGOOSE | ROTUNDA
+   * @returns {boolean}
+   */
+  useFont(key) {
+    const font = this.getFont(key);
+    if (!font) {
+      return false;
+    }
+    textFont(font);
+    return true;
   }
 
   /**
@@ -236,6 +267,23 @@ class AssetManager {
    * @returns {p5.Graphics}
    */
   _createImagePlaceholder(key) {
+    if (key === 'earth_continents') {
+      // Tira horizontal tileable (más ancha que alta) — solo si falta el PNG
+      const w = 512;
+      const h = 256;
+      const g = createGraphics(w, h);
+      g.pixelDensity(1);
+      g.clear();
+      g.noStroke();
+      g.fill(60, 150, 70);
+      g.ellipse(0, h * 0.45, w * 0.35, h * 0.4);
+      g.ellipse(w, h * 0.45, w * 0.35, h * 0.4);
+      g.ellipse(w * 0.5, h * 0.35, w * 0.28, h * 0.45);
+      g.ellipse(w * 0.25, h * 0.7, w * 0.2, h * 0.25);
+      g.ellipse(w * 0.75, h * 0.65, w * 0.22, h * 0.28);
+      return g;
+    }
+
     const isStrip = key.startsWith('parte_') || key.startsWith('letra_');
     const w = isStrip ? 640 : 320;
     const h = isStrip ? 80 : 160;

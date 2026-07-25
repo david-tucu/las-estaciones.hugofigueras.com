@@ -1,7 +1,7 @@
 /**
  * Fader
  * Control vertical de volumen (0–1) en coordenadas de diseño.
- * Soporta drag con mouse y touch vía pointerPressed/Dragged/Released.
+ * Knob = icono (cara / i_…); leyenda de texto debajo.
  */
 class Fader {
   /**
@@ -12,6 +12,7 @@ class Fader {
    * @param {number} config.bottom
    * @param {number} config.slotW Ancho de hitbox
    * @param {string} config.label
+   * @param {string} [config.iconKey]
    * @param {string} config.trackId
    * @param {number} [config.value]
    */
@@ -22,6 +23,7 @@ class Fader {
     this.bottom = config.bottom;
     this.slotW = config.slotW;
     this.label = config.label;
+    this.iconKey = config.iconKey || null;
     this.trackId = config.trackId;
     this.value =
       config.value !== undefined ? config.value : FADER_DEFAULT_VOLUME;
@@ -34,11 +36,21 @@ class Fader {
   }
 
   /**
-   * Zona útil del slider (deja margen para la etiqueta).
+   * Tamaño del knob-icono (100% más grande que el icono previo de 56).
+   * @returns {number}
+   */
+  _iconSize() {
+    const base = 112 * this.scale;
+    return this._dragging ? base * 1.08 : base;
+  }
+
+  /**
+   * Zona útil del slider (margen para knob grande + leyenda).
    * @returns {{ y0: number, y1: number, h: number }}
    */
   _trackBounds() {
-    const padTop = 20 * this.scale;
+    const iconR = this._iconSize() / 2;
+    const padTop = iconR + 8 * this.scale;
     const padBottom = 64 * this.scale;
     const y0 = this.top + padTop;
     const y1 = this.bottom - padBottom;
@@ -110,6 +122,9 @@ class Fader {
   _applyY(py) {
     const { y0, y1 } = this._trackBounds();
     this.value = constrain(map(py, y1, y0, 0, 1), 0, 1);
+    if (this.game.mixer && typeof this.game.mixer.onFaderUserChange === 'function') {
+      this.game.mixer.onFaderUserChange(this.trackId);
+    }
   }
 
   draw() {
@@ -127,19 +142,70 @@ class Fader {
     rectMode(CORNER);
     rect(this.x - 4 * s, knobY, 8 * s, y1 - knobY, 4 * s);
 
-    const knobR = (this._dragging ? 28 : 22) * s;
-    fill(...COLORS.ACCENT);
-    circle(this.x, knobY, knobR * 2);
+    this._drawKnob(knobY, s);
+    this._drawLabel(s);
+    pop();
+  }
 
+  /**
+   * Icono como elemento arrastrable (knob).
+   * @param {number} knobY
+   * @param {number} s
+   */
+  _drawKnob(knobY, s) {
+    const size = this._iconSize();
+    const img =
+      this.iconKey && this.game.assets
+        ? this.game.assets.getImage(this.iconKey)
+        : null;
+
+    if (img && img.width > 1) {
+
+      //dibuja un circulo blanco de base:
+      noStroke();
+      fill(255);
+      circle(this.x, knobY, size / 2);
+
+      //dibuja el icono sobre el circulo blanco:
+      imageMode(CENTER);
+      
+      drawingContext.save();
+      drawingContext.beginPath();
+      drawingContext.arc(this.x, knobY, size / 2, 0, Math.PI * 2);
+      drawingContext.closePath();
+      drawingContext.clip();
+      image(img, this.x, knobY, size, size);
+      drawingContext.restore();
+
+      noFill();
+      stroke(...COLORS.ACCENT);
+      strokeWeight((this._dragging ? 3.5 : 2.5) * s);
+      //circle(this.x, knobY, size);
+      return;
+    }
+
+    // Fallback: círculo accent si no hay icono
+    const r = (this._dragging ? 28 : 22) * s;
+    noStroke();
+    fill(...COLORS.ACCENT);
+    circle(this.x, knobY, r * 2);
+  }
+
+  /**
+   * Leyenda debajo del fader.
+   * @param {number} s
+   */
+  _drawLabel(s) {
+    noStroke();
     fill(...COLORS.TEXT_DIM);
     textAlign(CENTER, TOP);
-    textSize(16 * Math.max(0.85, s));
+    this.game.assets.useFont(FONTS.COCOGOOSE);
+    textSize(32 * Math.max(0.85, s));
     const lines = String(this.label).split('\n');
-    let ty = this.bottom - 52 * s;
+    let ty = this.bottom - 20 * s;
     for (const line of lines) {
       text(line, this.x, ty);
-      ty += 20 * s;
+      ty += 32 * s;
     }
-    pop();
   }
 }

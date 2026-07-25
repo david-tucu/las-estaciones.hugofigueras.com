@@ -1,6 +1,6 @@
 /**
  * IntroState
- * Pantalla de inicio: marca + COMENZAR + acceso a Info.
+ * Portada: fondo_intro + marca + CTA "A JUGAR!" + Info.
  */
 class IntroState extends BaseState {
   constructor(game) {
@@ -19,11 +19,12 @@ class IntroState extends BaseState {
     this.startButton = new Button({
       game: this.game,
       x: DESIGN_WIDTH / 2,
-      y: 1280,
-      w: 520,
-      h: 140,
-      label: 'COMENZAR',
-      labelSize: 52,
+      y: 1480,
+      w: 640,
+      h: 160,
+      label: 'A JUGAR!',
+      labelSize: 80,
+      labelOffsetY: -10,
       ctaPulse: true,
       onPress: () => this._goTo(STATES.PLAY),
     });
@@ -33,11 +34,12 @@ class IntroState extends BaseState {
     this.infoButton = new Button({
       game: this.game,
       x: DESIGN_WIDTH / 2,
-      y: 1480,
-      w: 360,
-      h: 100,
+      y: 1700,
+      w: 320,
+      h: 96,
       label: 'INFO',
-      labelSize: 34,
+      labelSize: 44,
+      labelOffsetY: -6,
       fillColor: [50, 60, 90],
       labelColor: COLORS.TEXT,
       onPress: () => this._goTo(STATES.INFO),
@@ -67,41 +69,12 @@ class IntroState extends BaseState {
   update(_dt) {}
 
   draw() {
-    this.game.drawBackground();
-
     push();
     drawingContext.globalAlpha = this.ui.alpha;
 
-    noStroke();
-    fill(255, 204, 0, 220);
-    circle(DESIGN_WIDTH / 2, 520, 220);
-    fill(255, 230, 120, 90);
-    circle(DESIGN_WIDTH / 2, 520, 320);
-
-    push();
-    translate(DESIGN_WIDTH / 2, 520);
-    rotate(-0.6);
-    noFill();
-    stroke(255, 255, 255, 40);
-    strokeWeight(2);
-    ellipse(0, 0, 520, 280);
-    noStroke();
-    fill(80, 160, 220);
-    circle(220, 0, 56);
-    pop();
-
-    fill(...COLORS.TEXT);
-    textAlign(CENTER, CENTER);
-    textSize(72);
-    text(APP_TITLE, DESIGN_WIDTH / 2, 820);
-
-    fill(...COLORS.ACCENT);
-    textSize(36);
-    text(APP_SUBTITLE, DESIGN_WIDTH / 2, 900);
-
-    fill(...COLORS.TEXT_DIM);
-    textSize(28);
-    text(APP_AUTHOR, DESIGN_WIDTH / 2, 970);
+    this._drawCoverBackground();
+    this._drawAuthorBadge();
+    this._drawTitles();
 
     drawingContext.globalAlpha = 1;
     pop();
@@ -112,6 +85,67 @@ class IntroState extends BaseState {
     if (this.infoButton) {
       this.infoButton.draw();
     }
+  }
+
+  _drawCoverBackground() {
+    const img = this.game.assets.getImage('fondo_intro');
+    if (img && img.width > 1) {
+      imageMode(CORNER);
+      // Blur sutil + luego se oscurece con overlay
+      drawingContext.save();
+      drawingContext.filter = 'blur(6px)';
+      image(img, -8, -8, DESIGN_WIDTH + 16, DESIGN_HEIGHT + 16);
+      drawingContext.filter = 'none';
+      drawingContext.restore();
+
+      noStroke();
+      fill(8, 10, 18, 110);
+      rect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+      return;
+    }
+    // Fallback si falta el PNG
+    this.game.drawBackground();
+  }
+
+  /**
+   * "Hugo Figueras" en rectángulo rojo pegado al borde superior,
+   * centrado, con esquinas inferiores redondeadas.
+   */
+  _drawAuthorBadge() {
+    const label = APP_AUTHOR;
+    const badgeH = 78;
+    const padX = 48;
+    this.game.assets.useFont(FONTS.ROTUNDA);
+    textSize(28);
+    const badgeW = Math.max(360, textWidth(label) + padX * 2);
+    const x = (DESIGN_WIDTH - badgeW) / 2;
+    const r = 28;
+
+    noStroke();
+    fill(200, 30, 40);
+    rectMode(CORNER);
+    // tl, tr, br, bl — solo inferiores redondeadas
+    rect(x, 0, badgeW, badgeH, 0, 0, r, r);
+
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text(label, DESIGN_WIDTH / 2, badgeH / 2 + 2);
+  }
+
+  _drawTitles() {
+    textAlign(CENTER, CENTER);
+
+    // Título grande (marca hero)
+    this.game.assets.useFont(FONTS.COCOGOOSE);
+    fill(...COLORS.TEXT);
+    textSize(96);
+    text(APP_TITLE, DESIGN_WIDTH / 2, 820);
+
+    // Subtítulo destaque
+    this.game.assets.useFont(FONTS.OUPS);
+    fill(...COLORS.ACCENT);
+    textSize(42);
+    text('MULTIJUEGO', DESIGN_WIDTH / 2, 930);
   }
 
   exit() {

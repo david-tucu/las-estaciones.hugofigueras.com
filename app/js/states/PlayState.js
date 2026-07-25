@@ -15,6 +15,9 @@ class PlayState extends BaseState {
 
     this.backButton = null;
     this.infoButton = null;
+    this.layersButton = null;
+    /** Capa de info orbital (meses / estaciones / polos). */
+    this._infoOverlay = false;
 
     this._exiting = false;
     this._activeFader = null;
@@ -41,6 +44,7 @@ class PlayState extends BaseState {
       y: LAYOUT.LYRIC_NORTE_Y,
       h: LAYOUT.LYRIC_H,
       scaleFactor: LAYOUT.LYRIC_SCALE_FACTOR,
+      cueSide: 'above',
     });
     this.marqueeSur = new MarqueeLyrics(this.game, {
       imageKey: mapSur ? mapSur.imageKeyScore : 'parte_sur',
@@ -48,9 +52,13 @@ class PlayState extends BaseState {
       y: LAYOUT.LYRIC_SUR_Y,
       h: LAYOUT.LYRIC_H,
       scaleFactor: LAYOUT.LYRIC_SCALE_FACTOR,
+      cueSide: 'below',
     });
 
     this._buildFaders();
+    if (this.game.mixer) {
+      this.game.mixer._faders = this.faders;
+    }
     this.transport = new TransportBar(
       this.game,
       this.game.mixer,
@@ -63,7 +71,7 @@ class PlayState extends BaseState {
       y: LAYOUT.NAV_Y,
       w: 200,
       h: 80,
-      label: 'INICIO',
+      label: 'SALIR',
       labelSize: 28,
       fillColor: [50, 60, 90],
       labelColor: COLORS.TEXT,
@@ -78,14 +86,30 @@ class PlayState extends BaseState {
       y: LAYOUT.NAV_Y,
       w: 200,
       h: 80,
-      label: 'INFO',
-      labelSize: 28,
+      label: '?',
+      labelSize: 40,
       fillColor: [50, 60, 90],
       labelColor: COLORS.TEXT,
       onPress: () => this._goTo(STATES.INFO),
     });
     this.infoButton.alpha = 0;
     this.infoButton.enabled = false;
+
+    this._infoOverlay = false;
+    this.layersButton = new Button({
+      game: this.game,
+      x: DESIGN_WIDTH - 70,
+      y: LAYOUT.ORBIT_Y + 48,
+      w: 72,
+      h: 72,
+      label: 'i',
+      labelSize: 36,
+      fillColor: [50, 60, 90],
+      labelColor: COLORS.TEXT,
+      onPress: () => this._toggleInfoOverlay(),
+    });
+    this.layersButton.alpha = 0;
+    this.layersButton.enabled = false;
 
     this.game.tweens.animate(this.ui, { alpha: 1 }, 0.35);
     this.game.tweens.animate(this.backButton, { alpha: 1 }, 0.3, {
@@ -100,10 +124,32 @@ class PlayState extends BaseState {
         this.infoButton.enabled = true;
       },
     });
+    this.game.tweens.animate(this.layersButton, { alpha: 1 }, 0.3, {
+      delay: 0.15,
+      onComplete: () => {
+        this.layersButton.enabled = true;
+      },
+    });
 
     console.info(
       `[PlayState] enter — ${this.faders.length} faders, mixer ready=${this.game.mixer.isReady}`
     );
+  }
+
+  _toggleInfoOverlay() {
+    this._infoOverlay = !this._infoOverlay;
+    if (this.orbit) {
+      this.orbit.showInfo = this._infoOverlay;
+    }
+    if (this.layersButton) {
+      this.layersButton.fillColor = this._infoOverlay
+        ? [...COLORS.ACCENT]
+        : [50, 60, 90];
+      this.layersButton.labelColor = this._infoOverlay
+        ? [...COLORS.BUTTON_LABEL]
+        : [...COLORS.TEXT];
+    }
+    this.game.audio.play(AUDIO_KEYS.CLIC);
   }
 
   /**
@@ -113,8 +159,8 @@ class PlayState extends BaseState {
     if (!this.game.mixer) {
       return;
     }
-    this.game.mixer.updateFades(this.faders);
     const progreso = this.game.mixer.getProgress();
+    this.game.mixer.updateFades(this.faders);
     if (this.orbit) {
       this.orbit.update(progreso);
     }
@@ -140,6 +186,7 @@ class PlayState extends BaseState {
 
     fill(...COLORS.TEXT_DIM);
     textAlign(CENTER, CENTER);
+    this.game.assets.useFont(FONTS.COCOGOOSE);
     textSize(22);
     text(APP_TITLE, DESIGN_WIDTH / 2, LAYOUT.NAV_Y);
 
@@ -172,6 +219,9 @@ class PlayState extends BaseState {
     if (this.infoButton) {
       this.infoButton.draw();
     }
+    if (this.layersButton) {
+      this.layersButton.draw();
+    }
   }
 
   exit() {
@@ -179,7 +229,7 @@ class PlayState extends BaseState {
       this.game.mixer.stopAll();
     }
     this.game.tweens.killTweensOf(this.ui);
-    for (const btn of [this.backButton, this.infoButton]) {
+    for (const btn of [this.backButton, this.infoButton, this.layersButton]) {
       if (btn) {
         this.game.tweens.killTweensOf(btn);
       }
@@ -191,6 +241,8 @@ class PlayState extends BaseState {
     this.transport = null;
     this.backButton = null;
     this.infoButton = null;
+    this.layersButton = null;
+    this._infoOverlay = false;
     this._activeFader = null;
     this._scrub = null;
     console.info('[PlayState] exit');
@@ -204,6 +256,12 @@ class PlayState extends BaseState {
       return;
     }
     if (this.infoButton && this.infoButton.pointerPressed(x, y)) {
+      return;
+    }
+    if (this.layersButton && this.layersButton.pointerPressed(x, y)) {
+      return;
+    }
+    if (this.orbit && this.orbit.pointerPressed(x, y)) {
       return;
     }
     if (this.transport && this.transport.pointerPressed(x, y)) {
@@ -224,6 +282,10 @@ class PlayState extends BaseState {
     if (this._exiting) {
       return;
     }
+    if (this.orbit && this.orbit._draggingView) {
+      this.orbit.pointerDragged(x, y);
+      return;
+    }
     if (this._activeFader) {
       this._activeFader.pointerDragged(x, y);
       return;
@@ -236,6 +298,9 @@ class PlayState extends BaseState {
   pointerReleased(x, y) {
     if (this._exiting) {
       return;
+    }
+    if (this.orbit && this.orbit._draggingView) {
+      this.orbit.pointerReleased();
     }
     if (this._activeFader) {
       this._activeFader.pointerReleased(x, y);
@@ -251,9 +316,15 @@ class PlayState extends BaseState {
     if (this.infoButton && this.infoButton.pointerReleased(x, y)) {
       return;
     }
+    if (this.layersButton && this.layersButton.pointerReleased(x, y)) {
+      return;
+    }
   }
 
   pointerCancel() {
+    if (this.orbit) {
+      this.orbit.pointerCancel();
+    }
     if (this._activeFader) {
       this._activeFader.pointerCancel();
       this._activeFader = null;
@@ -330,6 +401,8 @@ class PlayState extends BaseState {
 
     // Un solo seek de audio al soltar
     mixer.seekToProgress(mixer.progreso);
+    // Scrub siempre deja el estado en loop (no intro)
+    mixer.markLoopAfterScrub();
 
     if (wasPlaying) {
       mixer.fadeInAndResume(SCRUB_FADE_SEC, this.faders);
@@ -381,6 +454,7 @@ class PlayState extends BaseState {
           bottom: LAYOUT.FADER_BOTTOM,
           slotW,
           label: track.label,
+          iconKey: track.iconKey || null,
           trackId: track.id,
           value: FADER_DEFAULT_VOLUME,
         })

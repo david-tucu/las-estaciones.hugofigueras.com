@@ -1,8 +1,13 @@
 /**
  * Mixer
  * Reproduce y sincroniza los stems del TRACK_CATALOG.
- * Pausar usa pause() real (conserva posición); stop resetea.
- * Soporta scrub de timeline (fade + seek + resume).
+ *
+ * Fases:
+ *   intro — arranca en INTRO_START (0.75), mutea norte/sur hasta el fin (→1→0)
+ *   loop  — comportamiento normal; cue de norte en LOOP_NORTE_CUE (0.5)
+ *
+ * Pausar usa pause() real; stop cuea el inicio de la intro.
+ * Scrub deja la fase en loop.
  */
 class Mixer {
   /**
@@ -18,10 +23,24 @@ class Mixer {
     this.volsActuales = {};
 
     /** Progreso normalizado cacheado (sigue disponible en pausa / scrub). */
-    this.progreso = 0;
+    this.progreso = INTRO_START;
 
     /** 'stopped' | 'playing' | 'paused' */
     this.playback = 'stopped';
+
+    /** 'intro' | 'loop' */
+    this.phase = 'intro';
+
+    /**
+     * Tras Play: true hasta que el usuario mueve el fader.
+     * Los cues automáticos no apagan el flag (pueden aplicarse en cadena).
+     */
+    this.nortePendiente = false;
+    this.surPendiente = false;
+
+    /** One-shots de cues de voz en la reproducción actual. */
+    this._norteMidDone = false;
+    this._norteLoopEndDone = false;
 
     /**
      * Multiplicador global 0–1 (fade scrub / UI).
@@ -41,6 +60,12 @@ class Mixer {
      */
     this._progressLocked = false;
     this._progressLockFrames = 0;
+
+    /** Progreso del frame anterior (detectar wrap intro→loop). */
+    this._prevProgreso = INTRO_START;
+
+    /** @type {Fader[]|null} Ref a faders de Play (para bajar knobs en intro). */
+    this._faders = null;
 
     this._bindTracks();
   }
@@ -94,9 +119,17 @@ class Mixer {
   }
 
   /**
-   * Arranca o reanuda todas las pistas.
+   * @returns {boolean}
    */
-  playAll() {
+  get isPaused() {
+    return this.playback === 'paused';
+  }
+
+  /**
+   * PLAY: desde stopped → intro en INTRO_START (pendientes true).
+   * Si estaba pausado → solo reanuda. Si ya reproduce → no-op.
+   */
+  playPressed() {
     this.game.audio.unlock();
     if (!this.isReady) {
       console.warn('[Mixer] Pistas aún cargando…');
@@ -104,6 +137,8 @@ class Mixer {
     }
 
     if (this.playback === 'paused') {
+      this.masterFade = 1;
+      this._fadeProxy.v = 1;
       this._resumeAll();
       return;
     }
@@ -112,7 +147,57 @@ class Mixer {
       return;
     }
 
-    this._startFresh();
+    this.nortePendiente = true;
+    this.surPendiente = true;
+    this._norteMidDone = false;
+    this._norteLoopEndDone = false;
+    this.phase = 'intro';
+    // Voces en silencio visual + audio hasta sus cues
+    this._setVoiceFaders(0);
+    this._startAtProgress(INTRO_START);
+    console.info('[Mixer] Play → intro @', INTRO_START);
+  }
+
+  /**
+   * PAUSA: si reproduce → pausa; si pausado → reanuda en el mismo punto.
+   */
+  pausePressed() {
+    if (this.playback === 'playing') {
+      this.pauseAll();
+      return;
+    }
+    if (this.playback === 'paused') {
+      this.masterFade = 1;
+      this._fadeProxy.v = 1;
+      this._resumeAll();
+    }
+  }
+
+  /**
+   * Usuario movió un fader: cancela el auto-default pendiente.
+   * @param {string} trackId
+   */
+  onFaderUserChange(trackId) {
+    if (trackId === 'norte') {
+      this.nortePendiente = false;
+    } else if (trackId === 'sur') {
+      this.surPendiente = false;
+    }
+    // Si el usuario toma el control, cancelar fade automático
+    if (this._faders) {
+      const fader = this._faders.find((f) => f.trackId === trackId);
+      if (fader) {
+        this.game.tweens.killTweensOf(fader);
+      }
+    }
+  }
+
+  /**
+   * Tras scrub: forzar fase loop (no intro).
+   */
+  markLoopAfterScrub() {
+    this.phase = 'loop';
+    this._prevProgreso = this.progreso;
   }
 
   /**
@@ -122,7 +207,6 @@ class Mixer {
     if (this.playback !== 'playing') {
       return;
     }
-    // Congelar progreso visual antes de pausar (evita glitch al reanudar)
     this._syncProgressFromAudio();
     this._lockProgress(this.progreso);
 
@@ -141,7 +225,7 @@ class Mixer {
   }
 
   /**
-   * Detiene y vuelve a 0.
+   * Detiene y cuea el inicio de la intro (INTRO_START).
    */
   stopAll() {
     this.game.tweens.killTweensOf(this._fadeProxy);
@@ -162,18 +246,19 @@ class Mixer {
       }
       this.volsActuales[id] = 0;
     }
-    this.progreso = 0;
+    this.progreso = INTRO_START;
+    this._prevProgreso = INTRO_START;
+    this.phase = 'intro';
     this.playback = 'stopped';
-    console.info('[Mixer] Detenido');
+    console.info('[Mixer] Stop → intro cue @', INTRO_START);
   }
 
+  /** @deprecated Usar playPressed / pausePressed */
   togglePlayPause() {
     if (this.playback === 'playing') {
-      this.pauseAll();
+      this.pausePressed();
     } else {
-      this.masterFade = 1;
-      this._fadeProxy.v = 1;
-      this.playAll();
+      this.playPressed();
     }
   }
 
@@ -192,20 +277,24 @@ class Mixer {
   }
 
   /**
-   * Suaviza volúmenes hacia los faders y aplica masterFade.
+   * Suaviza volúmenes hacia los faders y transiciones de fase
+   * (intro→loop, cue norte). En intro, norte/sur van a 0 vía faders.
    * @param {Fader[]} faders
    */
   updateFades(faders) {
+    if (faders && faders.length) {
+      this._faders = faders;
+    }
     if (!faders || !faders.length) {
       this._applyAllVolumes();
       return;
     }
+
     for (const id of Object.keys(this.tracks)) {
       const fader = faders.find((f) => f.trackId === id);
       if (!fader) {
         continue;
       }
-      // Durante fade de scrub no pelear el master; sí seguir el fader
       this.volsActuales[id] = lerp(
         this.volsActuales[id],
         fader.value,
@@ -213,12 +302,11 @@ class Mixer {
       );
     }
     this._applyAllVolumes();
+    this._updatePhaseLogic(faders);
   }
 
   /**
    * Progreso 0–1 según pista timebase (Sur).
-   * Tras seek/resume no lee currentTime hasta que el audio se sincroniza
-   * (evita un frame con la Tierra en la posición anterior / en 0).
    * @returns {number}
    */
   getProgress() {
@@ -252,7 +340,6 @@ class Mixer {
 
   /**
    * Solo actualiza el progreso lógico (sin tocar audio).
-   * Usar durante el drag de scrub; el seek real va al soltar.
    * @param {number} progress 0–1
    */
   setProgressOnly(progress) {
@@ -263,7 +350,7 @@ class Mixer {
   }
 
   /**
-   * Salta todas las pistas a un progreso normalizado (una sola vez, p. ej. al soltar scrub).
+   * Salta todas las pistas a un progreso normalizado.
    * @param {number} progress 0–1
    */
   seekToProgress(progress) {
@@ -284,23 +371,18 @@ class Mixer {
         if (sound.isPlaying()) {
           sound.jump(time);
         } else if (sound.isPaused()) {
-          // Dejar cue en this.progreso; stop para resume limpio con loop(cue)
           sound.stop();
         }
       } catch (err) {
         console.warn(`[Mixer] seek falló en ${id}:`, err);
       }
     }
-    if (this.playback === 'playing') {
-      // jump mantiene playing
-    } else {
+    if (this.playback !== 'playing') {
       this.playback = 'paused';
     }
   }
 
   /**
-   * Pausa de inmediato y hace fade a silencio (inicio de scrub).
-   * Pausar primero evita que el audio siga avanzando mientras se scubea.
    * @param {number} duration
    * @param {function} [onComplete]
    */
@@ -328,7 +410,6 @@ class Mixer {
   }
 
   /**
-   * Reanuda desde this.progreso con fade in.
    * @param {number} duration
    * @param {Fader[]} [faders]
    */
@@ -337,7 +418,6 @@ class Mixer {
     this.masterFade = 0;
     this._fadeProxy.v = 0;
 
-    // Asegurar vols base desde faders antes de oír
     if (faders) {
       for (const id of Object.keys(this.tracks)) {
         const fader = faders.find((f) => f.trackId === id);
@@ -377,7 +457,7 @@ class Mixer {
     textAlign(LEFT, TOP);
     textSize(18);
     text(
-      `playback: ${this.playback}  t=${nf(this.progreso, 1, 3)}  fade=${nf(this.masterFade, 1, 2)}`,
+      `pb:${this.playback} ph:${this.phase} t=${nf(this.progreso, 1, 3)} Npend=${this.nortePendiente} Spend=${this.surPendiente}`,
       0,
       0
     );
@@ -410,6 +490,116 @@ class Mixer {
 
   // ---------------------------------------------------------------------------
 
+  /**
+   * Detecta wrap intro→loop, cue medio de voces y fin del primer loop.
+   * Solo mueve faders si el pendiente correspondiente sigue true.
+   * @param {Fader[]} faders
+   */
+  _updatePhaseLogic(faders) {
+    if (this.scrubbing || this.playback === 'stopped') {
+      this._prevProgreso = this.progreso;
+      return;
+    }
+
+    const p = this.progreso;
+    const prev = this._prevProgreso;
+    const wrapped = prev > 0.85 && p < 0.2;
+
+    // Intro termina al pasar el final (wrap 1→0)
+    if (this.phase === 'intro' && this.playback === 'playing' && wrapped) {
+      this._enterLoopFromIntro(faders);
+      this._prevProgreso = p;
+      return;
+    }
+
+    // Cue medio en loop (@ LOOP_NORTE_CUE)
+    if (
+      this.phase === 'loop' &&
+      !this._norteMidDone &&
+      p >= LOOP_NORTE_CUE
+    ) {
+      this._norteMidDone = true;
+      if (this.nortePendiente) {
+        this._fadeFaderTo(faders, 'norte', faderNorteMidLevel());
+        console.info('[Mixer] Norte → mid @', LOOP_NORTE_CUE);
+      }
+      if (this.surPendiente) {
+        this._fadeFaderTo(faders, 'sur', faderSurMidLevel());
+        console.info('[Mixer] Sur → mid @', LOOP_NORTE_CUE);
+      }
+    }
+
+    // Fin del primer loop: Norte baja/ajusta a (1+D)/2
+    if (
+      this.phase === 'loop' &&
+      this.playback === 'playing' &&
+      !this._norteLoopEndDone &&
+      wrapped
+    ) {
+      this._norteLoopEndDone = true;
+      if (this.nortePendiente) {
+        this._fadeFaderTo(faders, 'norte', faderNorteLoopEndLevel());
+        console.info('[Mixer] Norte → loop-end level');
+      }
+    }
+
+    this._prevProgreso = p;
+  }
+
+  /**
+   * @param {Fader[]} faders
+   */
+  _enterLoopFromIntro(faders) {
+    this.phase = 'loop';
+    if (this.surPendiente) {
+      this._fadeFaderTo(faders, 'sur', faderSurIntroLevel());
+      console.info('[Mixer] Intro→loop: Sur → intro level');
+    } else {
+      console.info('[Mixer] Intro→loop');
+    }
+  }
+
+  /**
+   * Fade suave del fader a un target (0–1). No toca el flag pendiente.
+   * @param {Fader[]} faders
+   * @param {string} trackId
+   * @param {number} target
+   */
+  _fadeFaderTo(faders, trackId, target) {
+    if (!faders) {
+      return;
+    }
+    const fader = faders.find((f) => f.trackId === trackId);
+    if (!fader) {
+      return;
+    }
+    const v = constrain(target, 0, 1);
+    this.game.tweens.killTweensOf(fader);
+    this.game.tweens.animate(fader, { value: v }, FADER_AUTO_FADE_SEC, {
+      easing: Easing.easeInOutQuad,
+    });
+  }
+
+  /**
+   * Baja (o setea) faders de voces norte/sur + volsActuales.
+   * @param {number} value 0–1
+   */
+  _setVoiceFaders(value) {
+    const v = constrain(value, 0, 1);
+    const faders = this._faders;
+    for (const id of ['norte', 'sur']) {
+      this.volsActuales[id] = v;
+      if (faders) {
+        const fader = faders.find((f) => f.trackId === id);
+        if (fader) {
+          this.game.tweens.killTweensOf(fader);
+          fader.value = v;
+        }
+      }
+      this._applyVolume(id);
+    }
+  }
+
   _applyVolume(id) {
     const sound = this.tracks[id];
     if (!sound) {
@@ -428,29 +618,43 @@ class Mixer {
     }
   }
 
-  _startFresh() {
+  /**
+   * Arranca (o reinicia) todas las pistas en un progreso dado, en loop.
+   * @param {number} progress 0–1
+   */
+  _startAtProgress(progress) {
     this.masterFade = 1;
     this._fadeProxy.v = 1;
-    this._lockProgress(0);
+    this._lockProgress(progress);
+    this._prevProgreso = progress;
+
     for (const id of Object.keys(this.tracks)) {
       const sound = this.tracks[id];
+      let dur = 0;
+      try {
+        dur = sound.duration();
+      } catch (_err) {
+        dur = 0;
+      }
+      const startAt =
+        dur > 0 ? constrain(progress * dur, 0, Math.max(0, dur - 0.05)) : 0;
       try {
         if (sound.isPlaying() || sound.isPaused()) {
           sound.stop();
         }
-        sound.loop(0, 1, 0, 0);
+        sound.loop(0, 1, 0, startAt);
         this.volsActuales[id] = 0;
       } catch (err) {
         console.warn(`[Mixer] play falló en ${id}:`, err);
       }
     }
     this.playback = 'playing';
-    console.info('[Mixer] Reproduciendo (fresh, sync en 0)');
   }
 
   _resumeAll() {
     const cue = this.progreso;
     this._lockProgress(cue);
+    this._prevProgreso = cue;
 
     for (const id of Object.keys(this.tracks)) {
       const sound = this.tracks[id];
@@ -467,7 +671,6 @@ class Mixer {
         if (typeof sound.setLoop === 'function') {
           sound.setLoop(true);
         }
-        // Pausa normal: reanudar sin stop/loop (evita currentTime=0 un frame)
         if (sound.isPaused()) {
           sound.play();
         } else {
@@ -485,7 +688,6 @@ class Mixer {
   }
 
   /**
-   * Fija el progreso visual y bloquea lecturas de currentTime un momento.
    * @param {number} progress
    */
   _lockProgress(progress) {
@@ -495,7 +697,6 @@ class Mixer {
   }
 
   /**
-   * Lee progreso desde la pista timebase, o null si no está disponible.
    * @returns {number|null}
    */
   _readAudioProgress() {
@@ -517,9 +718,6 @@ class Mixer {
     return null;
   }
 
-  /**
-   * Sincroniza this.progreso desde audio (si está disponible).
-   */
   _syncProgressFromAudio() {
     const audioT = this._readAudioProgress();
     if (audioT !== null) {

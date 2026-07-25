@@ -29,6 +29,8 @@ class Button {
     this.labelOffsetY =
       config.labelOffsetY !== undefined ? config.labelOffsetY : 0;
     this.fillColor = config.fillColor || COLORS.BUTTON_FILL;
+    /** @type {string|null} Icono vectorial ('layers') si no hay imageKey. */
+    this.icon = config.icon || null;
 
     this.ctaPulse = !!config.ctaPulse;
     this.ctaAmplitude =
@@ -141,20 +143,32 @@ class Button {
     if (ready) {
       image(img, 0, 0, this.w, this.h);
     } else {
+      const radius = this.h / 2; // píldora
       rectMode(CENTER);
       noStroke();
+
+      // Sombra
+      drawingContext.save();
+      drawingContext.shadowColor = 'rgba(0, 0, 0, 0.45)';
+      drawingContext.shadowBlur = 22;
+      drawingContext.shadowOffsetX = 0;
+      drawingContext.shadowOffsetY = 10;
       const [fr, fg, fb] = this.fillColor;
       fill(fr, fg, fb);
-      rect(0, 0, this.w, this.h, 28);
+      rect(0, 0, this.w, this.h, radius);
+      drawingContext.restore();
+
+      // Cuerpo (sin sombra, nítido)
+      fill(fr, fg, fb);
+      rect(0, 0, this.w, this.h, radius);
     }
 
-    if (this.label) {
+    if (this.icon === 'layers') {
+      this._drawLayersIcon(lr, lg, lb);
+    } else if (this.label) {
       fill(lr, lg, lb);
       textAlign(CENTER, CENTER);
-      const font = this.game.assets.getFont('main');
-      if (font) {
-        textFont(font);
-      }
+      this.game.assets.useFont(FONTS.OUPS);
       const size = this.labelSize || Math.min(48, this.h * 0.38);
       textSize(size);
       text(this.label, 0, this.labelOffsetY);
@@ -162,5 +176,25 @@ class Button {
 
     drawingContext.globalAlpha = 1;
     pop();
+  }
+
+  /**
+   * Icono de capas (tres placas apiladas).
+   * @param {number} r
+   * @param {number} g
+   * @param {number} b
+   */
+  _drawLayersIcon(r, g, b) {
+    const plateW = this.w * 0.42;
+    const plateH = this.h * 0.14;
+    const step = this.h * 0.13;
+    noStroke();
+    fill(r, g, b);
+    rectMode(CENTER);
+    for (let i = -1; i <= 1; i += 1) {
+      const ox = i * 4;
+      const oy = i * step;
+      rect(ox, oy, plateW, plateH, 4);
+    }
   }
 }

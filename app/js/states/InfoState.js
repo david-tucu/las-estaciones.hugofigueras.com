@@ -51,6 +51,7 @@ class InfoState extends BaseState {
 
     fill(...COLORS.ACCENT);
     textAlign(CENTER, CENTER);
+    this.game.assets.useFont(FONTS.OUPS);
     textSize(56);
     text('INFO', DESIGN_WIDTH / 2, 180);
 
@@ -76,9 +77,11 @@ class InfoState extends BaseState {
     for (const line of helpLines) {
       if (line === 'Cómo jugar') {
         fill(...COLORS.ACCENT);
+        this.game.assets.useFont(FONTS.COCOGOOSE);
         textSize(34);
       } else {
         fill(...COLORS.TEXT);
+        this.game.assets.useFont(FONTS.ROTUNDA);
         textSize(28);
       }
       text(line, 120, y);
@@ -87,14 +90,17 @@ class InfoState extends BaseState {
 
     y += 36;
     fill(...COLORS.ACCENT);
+    this.game.assets.useFont(FONTS.COCOGOOSE);
     textSize(34);
     text('Créditos', 120, y);
     y += 56;
     fill(...COLORS.TEXT);
+    this.game.assets.useFont(FONTS.COCOGOOSE);
     textSize(30);
     text(APP_TITLE, 120, y);
     y += 42;
     fill(...COLORS.TEXT_DIM);
+    this.game.assets.useFont(FONTS.ROTUNDA);
     textSize(26);
     text(APP_SUBTITLE + ' — ' + APP_AUTHOR, 120, y);
     y += 40;

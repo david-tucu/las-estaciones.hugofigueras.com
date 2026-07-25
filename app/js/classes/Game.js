@@ -81,6 +81,8 @@ class Game {
     const [lr, lg, lb] = COLORS.LETTERBOX;
     background(lr, lg, lb);
 
+   
+
     push();
     translate(this.offsetX, this.offsetY);
     scale(this.viewScale);
@@ -175,6 +177,7 @@ class Game {
 
   /**
    * Fondo compartido provisional (gradiente) en espacio de diseño.
+   * Franja blanca desde las partituras (LYRIC_NORTE_Y) hasta abajo.
    */
   drawBackground() {
     noStroke();
@@ -186,6 +189,13 @@ class Game {
       fill(r, g, b);
       rect(0, y, DESIGN_WIDTH, 8);
     }
+
+    const lyricTop =
+      typeof LAYOUT !== 'undefined' && LAYOUT.LYRIC_NORTE_Y != null
+        ? LAYOUT.LYRIC_NORTE_Y
+        : 0;
+    fill(255);
+    rect(0, lyricTop, DESIGN_WIDTH, DESIGN_HEIGHT - lyricTop);
   }
 
   // ---------------------------------------------------------------------------

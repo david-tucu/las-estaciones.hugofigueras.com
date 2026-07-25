@@ -16,6 +16,7 @@ class MarqueeLyrics {
    * @param {number} config.y
    * @param {number} config.h Alto de dibujo deseado (p. ej. LAYOUT.LYRIC_H)
    * @param {number} [config.scaleFactor] Extra desde LAYOUT.LYRIC_SCALE_FACTOR
+   * @param {'above'|'below'} [config.cueSide] Norte = above, Sur = below
    */
   constructor(game, config) {
     this.game = game;
@@ -23,6 +24,8 @@ class MarqueeLyrics {
     this.mapeo = config.map || [];
     this.y = config.y;
     this.h = config.h;
+    /** @type {'above'|'below'} */
+    this.cueSide = config.cueSide === 'below' ? 'below' : 'above';
 
     this.stripW =
       typeof LYRIC_STRIP_WIDTH !== 'undefined' ? LYRIC_STRIP_WIDTH : 3200;
@@ -141,10 +144,7 @@ class MarqueeLyrics {
       image(img, offsetX - drawW, this.y, drawW, drawH);
     }
 
-    // Playhead
-    stroke(...COLORS.ACCENT);
-    strokeWeight(2);
-    line(playheadX, this.y - 12, playheadX, this.y + drawH + 12);
+    this._drawCue(playheadX, drawH);
 
     if (this.debug) {
       push();
@@ -175,5 +175,46 @@ class MarqueeLyrics {
     }
 
     pop();
+  }
+
+  /**
+   * Marcador de cue: triángulo pequeño apuntando a la pista.
+   * Norte (`above`): encima, punta hacia abajo.
+   * Sur (`below`): debajo, punta hacia arriba.
+   * @param {number} playheadX
+   * @param {number} drawH
+   */
+  _drawCue(playheadX, drawH) {
+    const halfW = 11;
+    const triH = 14;
+    const gap = 3;
+
+    noStroke();
+    fill(...COLORS.ACCENT);
+
+    if (this.cueSide === 'below') {
+      const tipY = this.y + drawH + gap;
+      const baseY = tipY + triH;
+      triangle(
+        playheadX,
+        tipY,
+        playheadX - halfW,
+        baseY,
+        playheadX + halfW,
+        baseY
+      );
+      return;
+    }
+
+    const tipY = this.y - gap;
+    const baseY = tipY - triH;
+    triangle(
+      playheadX,
+      tipY,
+      playheadX - halfW,
+      baseY,
+      playheadX + halfW,
+      baseY
+    );
   }
 }

@@ -31,6 +31,18 @@ const AUDIO_KEYS = Object.freeze({
   // UI_CONFIRM: 'sfx_confirm',
 });
 
+/**
+ * Claves de tipografía (AssetManager).
+ * oups → botones y destaques
+ * cocogoose → nombres de track y títulos
+ * rotunda → descripciones
+ */
+const FONTS = Object.freeze({
+  OUPS: 'oups',
+  COCOGOOSE: 'cocogoose',
+  ROTUNDA: 'rotunda',
+});
+
 /** Paleta provisional (look & feel aún no definitivo). */
 const COLORS = Object.freeze({
   LETTERBOX: [15, 15, 18],
@@ -49,16 +61,16 @@ const COLORS = Object.freeze({
  * Ajustar acá sin tocar la lógica de clases.
  */
 const LAYOUT = Object.freeze({
-  NAV_Y: 90,
-  NAV_BAR_H: 140,
+  NAV_Y: 60,
+  NAV_BAR_H: 120,
   /** Bloque orbital ampliado. */
-  ORBIT_Y: 210,
-  ORBIT_H: 660,
-  TRANSPORT_Y: 900,
+  ORBIT_Y: 240,
+  ORBIT_H: 740,
+  TRANSPORT_Y: 1000,
   /** Franja de partituras: más baja y más alta. */
-  LYRIC_NORTE_Y: 990,
-  LYRIC_SUR_Y: 1200,
-  LYRIC_H: 200,
+  LYRIC_NORTE_Y: 1100,
+  LYRIC_SUR_Y: 1330,
+  LYRIC_H: 220,
   /**
    * Factor extra de escala de las tiras (ancho + avance + overlays).
    * escala final = (LYRIC_H / alto_nativo_80) * LYRIC_SCALE_FACTOR
@@ -69,8 +81,8 @@ const LAYOUT = Object.freeze({
    * Faders más abajo (sin botón INICIO inferior) y ~20% más chicos
    * (altura de pista ≈ 512 vs 640 previos).
    */
-  FADER_TOP: 1440,
-  FADER_BOTTOM: 1860,
+  FADER_TOP: 1590,
+  FADER_BOTTOM: 1870,
   /** Escala visual de knobs / trazo del fader (1 = original). */
   FADER_SCALE: 0.8,
   /** Posición X del playhead sobre las tiras (fracción del ancho). */
@@ -81,19 +93,63 @@ const LAYOUT = Object.freeze({
  * Vueltas de la Tierra sobre su eje por cada órbita completa (progreso 0→1).
  * No es escala real 365: es un valor pedagógico / visual.
  */
-const EARTH_SPINS_PER_ORBIT = 25;
+const EARTH_SPINS_PER_ORBIT = 8*4;
 
 /** Inclinación del eje terrestre (grados). */
-const EARTH_AXIS_TILT_DEG = 23.5;
+const EARTH_AXIS_TILT_DEG = 25.5;
+
+/**
+ * Fase inicial de la textura del planeta (radianes).
+ * En progreso 0, esta longitud queda de frente (p. ej. 1.65 ≈ 1.65/TWO_PI de vuelta).
+ */
+const EARTH_SPIN_OFFSET = -1.65;
 
 /**
  * Desfase de longitud (radianes) de Pepe (Norte) respecto al meridiano base.
  * Positivo = más avanzado en el giro.
  */
-const PEPE_LONGITUDE_OFFSET = 1.65;
+const PEPE_LONGITUDE_OFFSET = 3-1.65;
+
+/**
+ * Desfase de longitud (radianes) de Melisa (Sur) respecto al meridiano base.
+ * Positivo = más avanzado en el giro.
+ */
+const MELISA_LONGITUDE_OFFSET = 0;
 
 /** Volumen inicial de cada fader (0–1). */
 const FADER_DEFAULT_VOLUME = 0.35;
+
+/**
+ * Inicio de la intro musical (progreso 0–1).
+ * Intro: INTRO_START → 1; luego pasa a loop (0 → …).
+ */
+const INTRO_START = 0.75;
+
+/** En loop: primer cue de Norte (y ajuste de Sur) al cruzar este progreso. */
+const LOOP_NORTE_CUE = 0.5;
+
+/**
+ * Niveles automáticos de voces (solo si el fader sigue pendiente).
+ * Sur intro→loop: (2+D)/3
+ * Norte @ 0.5:    2·(2+D)/3  (clamp 0–1)
+ * Sur @ 0.5:      (1+D)/2
+ * Norte fin loop1:(1+D)/2
+ */
+function faderSurIntroLevel() {
+  return (2 + FADER_DEFAULT_VOLUME) / 3;
+}
+function faderNorteMidLevel() {
+  return Math.min(1, (2 * (2 + FADER_DEFAULT_VOLUME)) / 3);
+}
+function faderSurMidLevel() {
+  return (1 + FADER_DEFAULT_VOLUME) / 2;
+}
+function faderNorteLoopEndLevel() {
+  return (1 + FADER_DEFAULT_VOLUME) / 2;
+}
+
+/** Duración del fade suave al subir Norte/Sur a su volumen default (s). */
+const FADER_AUTO_FADE_SEC = 0.2;
 
 /** Suavizado de volumen hacia el valor del fader (por frame ~60fps). */
 const VOLUME_LERP = 0.08;
